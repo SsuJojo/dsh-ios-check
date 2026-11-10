@@ -39,6 +39,25 @@ jobs:
           fi
           echo "slice: $SLICE"
           echo "FLUTTER_FRAME_DIR=$XCF/$SLICE" >> "$GITHUB_ENV"
+      - name: Write the IslandsChannel shim
+        # The real IslandsChannel imports the webview_flutter_wkwebview plugin
+        # module, which a bare swiftc invocation cannot resolve (no Pods).
+        # DshPlugin.swift only constructs it, so the shim reproduces that exact
+        # initializer signature; AppDelegate.swift is excluded for the same
+        # reason (GeneratedPluginRegistrant comes from the bridging header).
+        run: |
+          mkdir -p "$RUNNER_TEMP/shim"
+          cat > "$RUNNER_TEMP/shim/IslandsChannelShim.swift" <<'EOF'
+          import Flutter
+          import Foundation
+
+          final class IslandsChannel: NSObject {
+            init(registrar: any FlutterPluginRegistrar) {
+              super.init()
+              _ = registrar
+            }
+          }
+          EOF
       - name: swiftc typecheck (phone self-runner, same command as upstream)
         run: |
           xcrun swiftc -swift-version 5 -typecheck -D DSH_PHONE_SELF_RUNNER \
@@ -49,14 +68,16 @@ jobs:
             app/ios/Runner/IOSPhoneSelfRunner.swift app/ios/Runner/IOSPhonePairingStore.swift \
             app/ios/Runner/IOSPhoneDDI.swift app/ios/Runner/IOSPhoneCoreDevice.swift \
             app/ios/Runner/IOSPhoneScreen.swift app/ios/Runner/IOSPhoneRPCDispatch.swift
-      - name: swiftc typecheck (engine + files channels, batch-2 set)
+      - name: swiftc typecheck (full Runner module minus plugin-bound files)
         run: |
+          FILES=$(find app/ios/Runner -name '*.swift' \
+            ! -name 'AppDelegate.swift' \
+            ! -name 'IslandsChannel.swift' | sort)
           xcrun swiftc -swift-version 5 -typecheck -D DSH_PHONE_SELF_RUNNER \
             -sdk "$IOS_SDK" \
             -target "$IOS_TARGET" \
             -F "$FLUTTER_FRAME_DIR" \
             -import-objc-header tooling/ios/phone-self-runner/include/dsh_phone_self_runner.h \
-            app/ios/Runner/EngineChannel.swift app/ios/Runner/DshPlugin.swift \
-            app/ios/Runner/EngineRuntime.swift app/ios/Runner/EngineSkills.swift \
-            app/ios/Runner/IOSPhoneBridge.swift app/ios/Runner/IOSPhoneActions.swift \
-            app/ios/Runner/IOSPhoneResultEnvelope.swift app/ios/Runner/IOSPhoneRunner.swift
+            $FILES \
+            app/ios/PhoneRunner/PhoneRunnerBootstrap.swift app/ios/PhoneRunner/PhoneRunnerObservation.swift \
+            "$RUNNER_TEMP/shim/IslandsChannelShim.swift"
