@@ -1,0 +1,106 @@
+name: Dart and Flutter checks
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: dsh-Go ref to check
+        required: false
+        default: perf-safe-batch2
+env:
+  FLUTTER_VERSION: 3.47.7
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
+  TZ: Asia/Shanghai
+
+jobs:
+  dsh-client:
+    name: dsh_client analyze + test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: SsuJojo/dsh-Go
+          ref: ${{ inputs.ref || 'perf-safe-batch2' }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - name: dart pub get
+        working-directory: packages/dsh_client
+        run: dart pub get --enforce-lockfile
+      - name: dart analyze
+        working-directory: packages/dsh_client
+        run: dart analyze
+      - name: dart test
+        working-directory: packages/dsh_client
+        run: dart test
+
+  app:
+    name: app analyze + targeted tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DSH_TEST_FONT_DIR: /usr/share/fonts/opentype/noto
+      NOTO_CJK_VERSION: 1:20230817+repack1-3
+      NOTO_EMOJI_VERSION: v2.051
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: SsuJojo/dsh-Go
+          ref: ${{ inputs.ref || 'perf-safe-batch2' }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      # Same fonts the upstream goldens were drawn with (copied verbatim from
+      # upstream ci.yml) so the golden-bearing composer tests run honestly.
+      - name: Restore the fonts the goldens were drawn with
+        id: fonts
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/test-fonts
+          key: test-fonts-${{ env.NOTO_CJK_VERSION }}-${{ env.NOTO_EMOJI_VERSION }}
+      - name: Download the fonts
+        if: steps.fonts.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          sudo apt-get update -q
+          apt-get download fonts-noto-cjk="$NOTO_CJK_VERSION" fonts-noto-cjk-extra="$NOTO_CJK_VERSION"
+          for deb in fonts-noto-cjk*.deb; do dpkg-deb -x "$deb" unpacked; done
+          mkdir -p ~/test-fonts
+          cp unpacked/usr/share/fonts/opentype/noto/NotoSansCJK-{Regular,Bold,Light}.ttc ~/test-fonts/
+          curl -fsSL --retry 3 -o ~/test-fonts/NotoColorEmoji.ttf "https://raw.githubusercontent.com/googlefonts/noto-emoji/$NOTO_EMOJI_VERSION/fonts/NotoColorEmoji.ttf"
+          echo "72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b  $HOME/test-fonts/NotoColorEmoji.ttf" | sha256sum -c -
+      - name: Save the fonts
+        if: steps.fonts.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/test-fonts
+          key: ${{ steps.fonts.outputs.cache-primary-key }}
+      - name: Install the fonts
+        run: |
+          sudo install -Dm644 -t "$DSH_TEST_FONT_DIR" ~/test-fonts/NotoSansCJK-*.ttc
+          sudo install -Dm644 ~/test-fonts/NotoColorEmoji.ttf /usr/share/fonts/noto/NotoColorEmoji.ttf
+      - name: flutter pub get
+        working-directory: app
+        run: flutter pub get --enforce-lockfile
+      - name: flutter analyze
+        working-directory: app
+        run: flutter analyze --no-pub
+      - name: targeted tests (areas this change touches)
+        working-directory: app
+        run: |
+          flutter test --no-pub \
+            test/chat/activity_copy_test.dart \
+            test/chat/compact_composer_test.dart \
+            test/chat/composer_geometry_test.dart \
+            test/chat/composer_insert_flow_test.dart \
+            test/chat/composer_keyboard_state_test.dart \
+            test/chat/composer_keyboard_test.dart \
+            test/chat/composer_mention_picker_test.dart \
+            test/chat/composer_mention_test.dart \
+            test/chat/composer_toast_test.dart \
+            test/chat/composer_voice_test.dart \
+            test/session/session_detail_test.dart
