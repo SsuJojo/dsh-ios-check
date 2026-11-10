@@ -69,6 +69,8 @@ jobs:
             app/ios/Runner/IOSPhoneDDI.swift app/ios/Runner/IOSPhoneCoreDevice.swift \
             app/ios/Runner/IOSPhoneScreen.swift app/ios/Runner/IOSPhoneRPCDispatch.swift
       - name: swiftc typecheck (full Runner module minus plugin-bound files)
+        # ShareInbox.swift (below) is compiled into the Runner target too
+        # (shared with the ShareExtension target); it only imports Foundation.
         run: |
           FILES=$(find app/ios/Runner -name '*.swift' \
             ! -name 'AppDelegate.swift' \
@@ -78,9 +80,7 @@ jobs:
             -target "$IOS_TARGET" \
             -F "$FLUTTER_FRAME_DIR" \
             -import-objc-header tooling/ios/phone-self-runner/include/dsh_phone_self_runner.h \
-            # ShareInbox.swift is compiled into the Runner target too (shared
-          # with the ShareExtension target); it only imports Foundation.
-          $FILES \
-          app/ios/ShareExtension/ShareInbox.swift \
+            $FILES \
+            app/ios/ShareExtension/ShareInbox.swift \
             app/ios/PhoneRunner/PhoneRunnerBootstrap.swift app/ios/PhoneRunner/PhoneRunnerObservation.swift \
             "$RUNNER_TEMP/shim/IslandsChannelShim.swift"
