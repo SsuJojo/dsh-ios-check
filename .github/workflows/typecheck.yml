@@ -78,6 +78,9 @@ jobs:
             -target "$IOS_TARGET" \
             -F "$FLUTTER_FRAME_DIR" \
             -import-objc-header tooling/ios/phone-self-runner/include/dsh_phone_self_runner.h \
-            $FILES \
+            # ShareInbox.swift is compiled into the Runner target too (shared
+          # with the ShareExtension target); it only imports Foundation.
+          $FILES \
+          app/ios/ShareExtension/ShareInbox.swift \
             app/ios/PhoneRunner/PhoneRunnerBootstrap.swift app/ios/PhoneRunner/PhoneRunnerObservation.swift \
             "$RUNNER_TEMP/shim/IslandsChannelShim.swift"
