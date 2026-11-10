@@ -8,9 +8,6 @@ on:
         default: perf-safe-batch2
 env:
   FLUTTER_VERSION: 3.47.7
-  # The checked-in lockfiles record pub.flutter-io.cn as the hosted source, so
-  # resolution must go through the same mirror as upstream CI.
-  PUB_HOSTED_URL: https://pub.flutter-io.cn
   TZ: Asia/Shanghai
 
 jobs:
@@ -18,6 +15,11 @@ jobs:
     name: dsh_client analyze + test
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      # The checked-in lockfile records pub.flutter-io.cn as the hosted source,
+      # so --enforce-lockfile resolution must go through the same mirror as
+      # upstream CI.
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
     steps:
       - uses: actions/checkout@v4
         with:
@@ -92,14 +94,13 @@ jobs:
           sudo install -Dm644 -t "$DSH_TEST_FONT_DIR" ~/test-fonts/NotoSansCJK-*.ttc
           sudo install -Dm644 ~/test-fonts/NotoColorEmoji.ttf /usr/share/fonts/noto/NotoColorEmoji.ttf
       - name: flutter pub get
+        # The app lockfile is mirror-bound, and the mirror serves archives
+        # whose content-hash does not match the lockfile for some plugin
+        # packages (image_picker_ios 0.8.13+15, file_selector_platform_interface
+        # 2.7.0 observed). This job therefore resolves fresh from pub.dev —
+        # same constraints as pubspec.yaml, versions may drift within them.
         working-directory: app
-        run: |
-          for attempt in 1 2 3; do
-            if flutter pub get --enforce-lockfile; then exit 0; fi
-            echo "pub get failed (attempt $attempt); retrying"
-            sleep 15
-          done
-          exit 1
+        run: flutter pub get
       - name: flutter analyze
         working-directory: app
         run: flutter analyze --no-pub
