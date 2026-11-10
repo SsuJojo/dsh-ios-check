@@ -1,26 +1,62 @@
 name: Typecheck the iOS observation pipeline
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: dsh-Go ref to typecheck
+        required: false
+        default: perf-safe-batch2
 jobs:
   typecheck:
     runs-on: macos-26
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           repository: SsuJojo/dsh-Go
-          ref: feat/ios-foundation
+          ref: ${{ inputs.ref || 'perf-safe-batch2' }}
           persist-credentials: false
-      - name: swiftc typecheck (same command as upstream ios-compile.yml)
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.7
+          channel: stable
+      - name: Precache the iOS engine artifacts
+        run: flutter precache --ios
+      - name: Locate the Flutter framework slice
+        run: |
+          set -euo pipefail
+          XCF=$(find "$FLUTTER_ROOT/bin/cache/artifacts/engine" -maxdepth 2 -name 'Flutter.xcframework' | head -1)
+          test -n "$XCF"
+          echo "framework: $XCF"
+          SLICE=$(ls "$XCF" | grep -E '^ios-.*simulator$' | head -1 || true)
+          if [ -n "$SLICE" ]; then
+            echo "IOS_SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)" >> "$GITHUB_ENV"
+            echo "IOS_TARGET=arm64-apple-ios17.0-simulator" >> "$GITHUB_ENV"
+          else
+            SLICE=$(ls "$XCF" | grep -E '^ios-arm64$' | head -1)
+            echo "IOS_SDK=$(xcrun --sdk iphoneos --show-sdk-path)" >> "$GITHUB_ENV"
+            echo "IOS_TARGET=arm64-apple-ios17.0" >> "$GITHUB_ENV"
+          fi
+          echo "slice: $SLICE"
+          echo "FLUTTER_FRAME_DIR=$XCF/$SLICE" >> "$GITHUB_ENV"
+      - name: swiftc typecheck (phone self-runner, same command as upstream)
         run: |
           xcrun swiftc -swift-version 5 -typecheck -D DSH_PHONE_SELF_RUNNER \
-            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
-            -target arm64-apple-ios17.0-simulator \
+            -sdk "$IOS_SDK" \
+            -target "$IOS_TARGET" \
             -import-objc-header tooling/ios/phone-self-runner/include/dsh_phone_self_runner.h \
-            app/ios/PhoneRunner/PhoneRunnerBootstrap.swift app/ios/Runner/IOSPhoneSelfRunner.swift \
-            app/ios/Runner/IOSPhonePairingStore.swift app/ios/Runner/IOSPhoneDDI.swift \
-            app/ios/Runner/IOSPhoneCoreDevice.swift app/ios/Runner/IOSPhoneScreen.swift \
-            app/ios/Runner/IOSPhoneRPCDispatch.swift app/ios/PhoneRunner/PhoneRunnerObservation.swift
-      - name: typecheck the UI-tests side too (Frame + ImageScale consumers)
+            app/ios/PhoneRunner/PhoneRunnerBootstrap.swift app/ios/PhoneRunner/PhoneRunnerObservation.swift \
+            app/ios/Runner/IOSPhoneSelfRunner.swift app/ios/Runner/IOSPhonePairingStore.swift \
+            app/ios/Runner/IOSPhoneDDI.swift app/ios/Runner/IOSPhoneCoreDevice.swift \
+            app/ios/Runner/IOSPhoneScreen.swift app/ios/Runner/IOSPhoneRPCDispatch.swift
+      - name: swiftc typecheck (engine + files channels, batch-2 set)
         run: |
-          echo "swift typecheck of PhoneRunnerObservation.swift against the app target passed"
+          xcrun swiftc -swift-version 5 -typecheck -D DSH_PHONE_SELF_RUNNER \
+            -sdk "$IOS_SDK" \
+            -target "$IOS_TARGET" \
+            -F "$FLUTTER_FRAME_DIR" \
+            -import-objc-header tooling/ios/phone-self-runner/include/dsh_phone_self_runner.h \
+            app/ios/Runner/EngineChannel.swift app/ios/Runner/DshPlugin.swift \
+            app/ios/Runner/EngineRuntime.swift app/ios/Runner/EngineSkills.swift \
+            app/ios/Runner/IOSPhoneBridge.swift app/ios/Runner/IOSPhoneActions.swift \
+            app/ios/Runner/IOSPhoneResultEnvelope.swift app/ios/Runner/IOSPhoneRunner.swift
