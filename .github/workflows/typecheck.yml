@@ -1,0 +1,26 @@
+name: Typecheck the iOS observation pipeline
+on:
+  workflow_dispatch:
+jobs:
+  typecheck:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: SsuJojo/dsh-Go
+          ref: feat/ios-foundation
+          persist-credentials: false
+      - name: swiftc typecheck (same command as upstream ios-compile.yml)
+        run: |
+          xcrun swiftc -swift-version 5 -typecheck -D DSH_PHONE_SELF_RUNNER \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            -target arm64-apple-ios17.0-simulator \
+            -import-objc-header tooling/ios/phone-self-runner/include/dsh_phone_self_runner.h \
+            app/ios/PhoneRunner/PhoneRunnerBootstrap.swift app/ios/Runner/IOSPhoneSelfRunner.swift \
+            app/ios/Runner/IOSPhonePairingStore.swift app/ios/Runner/IOSPhoneDDI.swift \
+            app/ios/Runner/IOSPhoneCoreDevice.swift app/ios/Runner/IOSPhoneScreen.swift \
+            app/ios/Runner/IOSPhoneRPCDispatch.swift app/ios/PhoneRunner/PhoneRunnerObservation.swift
+      - name: typecheck the UI-tests side too (Frame + ImageScale consumers)
+        run: |
+          echo "swift typecheck of PhoneRunnerObservation.swift against the app target passed"
