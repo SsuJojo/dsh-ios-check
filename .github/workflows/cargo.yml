@@ -1,0 +1,26 @@
+name: Rust check (phone self-runner)
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit or branch of SsuJojo/dsh-Go to check
+        required: true
+        default: main
+jobs:
+  check:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: SsuJojo/dsh-Go
+          ref: ${{ inputs.ref }}
+      - name: Install pinned toolchain (rust-toolchain.toml pins 1.99.1)
+        run: |
+          rustup update 1.99.1
+          rustup target add aarch64-apple-ios --toolchain 1.99.1
+      - name: cargo check (iOS target, all targets incl. tests)
+        working-directory: tooling/ios/phone-self-runner
+        run: cargo check --all-targets --target aarch64-apple-ios
+      - name: cargo test (host compiles the apple code path; runs unit tests)
+        working-directory: tooling/ios/phone-self-runner
+        run: cargo test
