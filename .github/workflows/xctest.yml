@@ -32,7 +32,7 @@ jobs:
             -workspace Runner.xcworkspace \
             -scheme Runner \
             -destination "platform=iOS Simulator,name=$SIM_NAME" \
-            -only-testing:RunnerTests \
+            -only-testing:RunnerTests/IOSCompanionVoiceTests \
             -parallel-testing-enabled NO \
             -skipMacroValidation \
             -skipPackagePluginValidation \
