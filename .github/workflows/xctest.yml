@@ -33,6 +33,7 @@ jobs:
             -scheme Runner \
             -destination "platform=iOS Simulator,name=$SIM_NAME" \
             -only-testing:RunnerTests \
+            -parallel-testing-enabled NO \
             -skipMacroValidation \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/xctest.log" | tail -40
