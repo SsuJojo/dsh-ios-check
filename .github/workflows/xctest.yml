@@ -17,13 +17,12 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.7
+      - name: flutter precache --ios
+        run: flutter precache --ios
       - name: flutter pub get (app resolves from pub.dev; mirror archives fail hash checks)
         working-directory: app
         run: flutter pub get
-      - name: pod install
-        working-directory: app/ios
-        run: pod install
-      - name: xcodebuild test (RunnerTests on a simulator)
+      - name: xcodebuild test (RunnerTests on a simulator; plugins resolve via SPM, no CocoaPods)
         working-directory: app/ios
         run: |
           SIM_NAME=$(xcrun simctl list devices available | grep -E '^\s+iPhone' | head -1 | sed -E 's/\(.*//' | xargs)
@@ -34,4 +33,6 @@ jobs:
             -scheme Runner \
             -destination "platform=iOS Simulator,name=$SIM_NAME" \
             -only-testing:RunnerTests \
+            -skipMacroValidation \
+            -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/xctest.log" | tail -40
