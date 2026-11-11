@@ -1,0 +1,37 @@
+name: iOS unit tests (RunnerTests via xcodebuild)
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit or branch of SsuJojo/dsh-Go to check
+        required: true
+        default: main
+jobs:
+  xctest:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: SsuJojo/dsh-Go
+          ref: ${{ inputs.ref }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.7
+      - name: flutter pub get (app resolves from pub.dev; mirror archives fail hash checks)
+        working-directory: app
+        run: flutter pub get
+      - name: pod install
+        working-directory: app/ios
+        run: pod install
+      - name: xcodebuild test (RunnerTests on a simulator)
+        working-directory: app/ios
+        run: |
+          SIM_NAME=$(xcrun simctl list devices available | grep -E '^\s+iPhone' | head -1 | sed -E 's/\(.*//' | xargs)
+          echo "Simulator: $SIM_NAME"
+          set -o pipefail
+          xcodebuild test \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -destination "platform=iOS Simulator,name=$SIM_NAME" \
+            -only-testing:RunnerTests \
+            CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/xctest.log" | tail -40
