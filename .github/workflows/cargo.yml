@@ -18,6 +18,9 @@ jobs:
         run: |
           rustup update 1.99.1
           rustup target add aarch64-apple-ios --toolchain 1.99.1
+      - name: Prepare vendored upstream (idevice @ pinned commit, sha256-verified)
+        working-directory: tooling/ios/phone-self-runner
+        run: python3 prepare_upstream.py
       - name: cargo check (iOS target, all targets incl. tests)
         working-directory: tooling/ios/phone-self-runner
         run: cargo check --all-targets --target aarch64-apple-ios
